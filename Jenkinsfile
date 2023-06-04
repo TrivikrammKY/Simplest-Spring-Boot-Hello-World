@@ -29,13 +29,7 @@ pipeline {
   -Dsonar.token=sqp_e2956d94b5be58186f7df8a6e2da77a0a8c9864d'''
     }
   }
-           	 stage('saving the artifact') {
-            steps {
-                sh ''' 
-                cp /var/lib/jenkins/workspace/test/target/project-${BUILD_NUMBER}.war /data/archives/project/project-$BUILD_NUMBER.jar
-                '''
-            }
-        }
+           	 
  stage('sast owasp') {
             steps {
               dependencyCheck additionalArguments: '''--project=test
@@ -43,30 +37,26 @@ pipeline {
 --format="XML"''', odcInstallation: 'default'
             }
         }
-          stage('Docker file') {
-          steps {
-              sh '''touch Dockerfile
-cat<<EOT>> Dockerfile
-FROM bitnami/java:1.8
-WORKDIR /app
-COPY target/project-${BUILD_NUMBER}.war app.jar
-EXPOSE 8082
-CMD ["java", "-jar", "app.jar"]
-EOT'''
-          }
-         
-        }
-         stage('Docker build') {
+        stage('Docker build') {
           steps {
               sh '''docker build -t testapp .'''
           }
          
         }
+         
+      
          stage('Docker run') {
           steps {
               sh '''docker rm -f $(docker ps -a -q) && docker run -d -it -p 8082:8080 --name testapp testapp'''
           }
          
+        }
+     stage('saving the artifact') {
+            steps {
+                sh ''' 
+                cp /var/lib/jenkins/workspace/test/target/project-1.0.1.war /data/archives/project/project-$BUILD_NUMBER.jar
+                '''
+            }
         }
         	 stage('publish the report') {
             steps {
