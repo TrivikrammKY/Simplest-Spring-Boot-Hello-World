@@ -2,48 +2,78 @@ pipeline {
     agent any
 
  stages {
+     
         stage('git clone') {
             steps {
-                git 'https://github.com/adityanaidu20690/Simplest-Spring-Boot-Hello-World.git'
+                git 'https://github.com/TrivikrammKY/Simplest-Spring-Boot-Hello-World.git'
             }
         }
-    stage('maven build') {
+  stage('maven build') {
           steps {
-               sh 'mvn clean install test package'
+               sh 'mvn clean package'
           }
          
         }
+        stage('maven test') {
+          steps {
+               sh 'mvn test'
+          }
          
-        stage('upload artifact') {
+        }
+        stage('SonarQube Analysis') {
+    steps {
+      sh '''mvn clean verify sonar:sonar \
+  -Dsonar.projectKey=sonar \
+  -Dsonar.projectName='sonar' \
+  -Dsonar.host.url=http://3.95.151.243:9010 \
+  -Dsonar.token=sqp_e2956d94b5be58186f7df8a6e2da77a0a8c9864d'''
+    }
+  }
+           	 stage('saving the artifact') {
             steps {
-               nexusPublisher nexusInstanceId: 'addydevops', nexusRepositoryId: 'addydevops-release', packages: [[$class: 'MavenPackage', mavenAssetList: [[classifier: '', extension: 'war', filePath: 'target/addydevops-1.0.1.war']], mavenCoordinate: [artifactId: 'addydevops', groupId: 'orbartal', packaging: 'war', version: '1.0.1']]]
+                sh ''' 
+                cp /var/lib/jenkins/workspace/test/target/project-${BUILD_NUMBER}.war /data/archives/project/project-$BUILD_NUMBER.jar
+                '''
             }
         }
-     stage('sast owasp') {
+ stage('sast owasp') {
             steps {
-                dependencyCheck additionalArguments: '''--project=pipeline
---scan="/var/lib/jenkins/workspace/pipeline"
+              dependencyCheck additionalArguments: '''--project=test
+--scan="/var/lib/jenkins/workspace/test"
 --format="XML"''', odcInstallation: 'default'
             }
         }
-     
-         stage('Downloading from nexus artifact') {
-            steps {
-            ansiblePlaybook become: true, credentialsId: 'ansible', disableHostKeyChecking: true, installation: 'ansible', inventory: '/etc/ansible/hosts', playbook: '/etc/ansible/play.yml' 
-           }
+          stage('Docker file') {
+          steps {
+              sh '''touch Dockerfile
+cat<<EOT>> Dockerfile
+FROM bitnami/java:1.8
+WORKDIR /app
+COPY target/project-${BUILD_NUMBER}.war app.jar
+EXPOSE 8082
+CMD ["java", "-jar", "app.jar"]
+EOT'''
+          }
+         
         }
-      stage('docker run') {
-            steps {
-               sh '''
-docker build -t addytest .
-docker rm -f addytest
-docker run -d -it --name addytest -p 8082:8080 addytest'''
-            }
+         stage('Docker build') {
+          steps {
+              sh '''docker build -t testapp .'''
+          }
+         
         }
-     stage('publish the report') {
+         stage('Docker run') {
+          steps {
+              sh '''docker rm -f $(docker ps -a -q) && docker run -d -it -p 8082:8080 --name testapp testapp'''
+          }
+         
+        }
+        	 stage('publish the report') {
             steps {
                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
-    }
+      
+
+ }
 }
